@@ -13,6 +13,7 @@ _DEFAULTS: dict = {
     "backup_path": "",
     "auto_backup": True,
     "backup_limit": 10,
+    "use_full_monitor_names": False,
 }
 
 _cache: dict | None = None

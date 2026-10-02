@@ -946,6 +946,12 @@ class NiriModWindow(Adw.ApplicationWindow):
         except Exception as e:
             self.show_toast(f"Restore failed: {e}", timeout=6)
 
+    def _set_and_notify_outputs(self, row):
+        from nirimod import app_settings
+
+        app_settings.set("use_full_monitor_names", row.get_active())
+        self.notify_nodes_changed()
+
     def _open_preferences(self):
         from nirimod import app_settings
 
@@ -1022,6 +1028,19 @@ class NiriModWindow(Adw.ApplicationWindow):
         backup_path_row.add_suffix(clear_backup_btn)
 
         config_grp.add(backup_path_row)
+
+        full_monitor_names_row = Adw.SwitchRow(
+            title="Use Full Monitor Names",
+            subtitle="Use monitors' make, model, and serial as the monitor identifier instead of the output name",
+        )
+        full_monitor_names_row.set_active(
+            app_settings.get("use_full_monitor_names", True)
+        )
+        full_monitor_names_row.connect(
+            "notify::active",
+            lambda row, _: self._set_and_notify_outputs(row),
+        )
+        config_grp.add(full_monitor_names_row)
 
         auto_backup_row = Adw.SwitchRow(
             title="Automatic Backups",

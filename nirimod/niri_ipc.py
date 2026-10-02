@@ -144,6 +144,11 @@ def get_outputs(callback: Callable[[list[dict]], None]) -> None:
             return
         try:
             data = json.loads(stdout)
+            # create the full monitor name for use in configs
+            for key, value in data.items():
+                value["full_name"] = (
+                    f"{value['make'] if value['make'] else 'Unknown'} {value['model'] if value['model'] else 'Unknown'} {value['serial'] if value['serial'] else 'Unknown'}"
+                )
             callback(list(data.values()) if isinstance(data, dict) else data)
         except json.JSONDecodeError:
             callback([])

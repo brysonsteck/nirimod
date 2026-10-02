@@ -55,6 +55,8 @@ class OutputsPage(BasePage):
         super().__init__(window)
         self._outputs: list[dict] = []
         self._current_out: dict | None = None
+        self._use_full_names: bool = False
+        self._node_name: str = "name"
 
         self._canvas: Gtk.DrawingArea | None = None
         self._drag_output: str | None = None
@@ -111,7 +113,7 @@ class OutputsPage(BasePage):
         for o in self._outputs:
             if o.get("logical") is not None:
                 continue
-            name = o.get("name")
+            name = o.get(self._node_name)
             if not name:
                 continue
             out_node = next(
@@ -178,9 +180,13 @@ class OutputsPage(BasePage):
 
     def refresh(self):
         def _on_got_outputs(outputs):
+            from nirimod import app_settings
+
             self._outputs = outputs
             self._supply_offline_outputs()
-            names = [o.get("name", "?") for o in self._outputs]
+            self._use_full_names = app_settings.get("use_full_monitor_names", False)
+            self._node_name = "full_name" if self._use_full_names else "name"
+            names = [o.get(self._node_name, "?") for o in self._outputs]
             model = Gtk.StringList.new(names)
             self._out_combo.set_model(model)
             if self._outputs:
@@ -195,12 +201,13 @@ class OutputsPage(BasePage):
 
     def _add_fake_monitor(self):
         idx = 1
-        while any(o.get("name") == f"fake-{idx}" for o in self._outputs):
+        while any(o.get(self._node_name) == f"fake-{idx}" for o in self._outputs):
             idx += 1
         name = f"fake-{idx}"
 
         o = {
             "name": name,
+            "full_name": name,
             "modes": [{"width": 1920, "height": 1080, "refresh_rate": 60000}],
             "current_mode": 0,
             "logical": {
@@ -214,7 +221,7 @@ class OutputsPage(BasePage):
         }
         self._outputs.append(o)
 
-        names = [out.get("name", "?") for out in self._outputs]
+        names = [out.get(self._node_name, "?") for out in self._outputs]
         model = Gtk.StringList.new(names)
         self._out_combo.set_model(model)
         self._out_combo.set_selected(len(self._outputs) - 1)
@@ -291,8 +298,8 @@ class OutputsPage(BasePage):
             w = pos.get("width", 1920) * scale
             h = pos.get("height", 1080) * scale
 
-            is_sel = o.get("name") == (
-                self._current_out.get("name") if self._current_out else None
+            is_sel = o.get(self._node_name) == (
+                self._current_out.get(self._node_name) if self._current_out else None
             )
 
             if is_sel:
@@ -310,7 +317,7 @@ class OutputsPage(BasePage):
                 cr.set_source_rgba(0.4, 0.4, 0.45, 0.6)
             cr.stroke()
 
-            name = o.get("name", f"Output {i}")
+            name = o.get(self._node_name, f"Output {i}")
             mode_idx = o.get("current_mode")
             modes = o.get("modes", [])
             mode = (
@@ -359,7 +366,7 @@ class OutputsPage(BasePage):
             w = pos.get("width", 1920) * scale
             h = pos.get("height", 1080) * scale
             if x <= sx <= x + w and y <= sy <= y + h:
-                self._drag_output = o["name"]
+                self._drag_output = o[self._node_name]
                 self._last_dx = 0
                 self._last_dy = 0
                 self._drag_current_lx = pos.get("x", 0)
@@ -385,7 +392,8 @@ class OutputsPage(BasePage):
         new_ly = self._drag_current_ly
 
         drag_o = next(
-            (o for o in self._outputs if o.get("name") == self._drag_output), None
+            (o for o in self._outputs if o.get(self._node_name) == self._drag_output),
+            None,
         )
         if not drag_o:
             return
@@ -425,7 +433,7 @@ class OutputsPage(BasePage):
         dragged_bottom = new_ly + logical_h
 
         for other in self._outputs:
-            if other.get("name") == self._drag_output:
+            if other.get(self._node_name) == self._drag_output:
                 continue
 
             other_pos = other.get("logical") or {}
@@ -524,7 +532,7 @@ class OutputsPage(BasePage):
                 self._canvas.queue_draw()
 
             for o in self._outputs:
-                self._apply_position(o["name"])
+                self._apply_position(o[self._node_name])
 
             if self._current_out:
                 cur_pos = self._current_out.get("logical") or {}
@@ -554,7 +562,7 @@ class OutputsPage(BasePage):
                 return
 
     def _apply_position(self, name: str):
-        o = next((x for x in self._outputs if x["name"] == name), None)
+        o = next((x for x in self._outputs if x[self._node_name] == name), None)
         if not o:
             return
         pos = o.get("logical") or {}
@@ -570,7 +578,7 @@ class OutputsPage(BasePage):
         pos_node.props["x"] = int(round(nx))
         pos_node.props["y"] = int(round(ny))
 
-        if self._current_out and self._current_out.get("name") == name:
+        if self._current_out and self._current_out.get(self._node_name) == name:
             if hasattr(self, "_pos_x_adj"):
                 self._pos_x_adj.set_value(nx)
             if hasattr(self, "_pos_y_adj"):
@@ -591,7 +599,7 @@ class OutputsPage(BasePage):
         for child in list(self._detail_box):
             self._detail_box.remove(child)
 
-        name = output.get("name", "?")
+        name = output.get(self._node_name, "?")
         nodes = self._nodes
         out_node = next(
             (n for n in nodes if n.name == "output" and n.args and n.args[0] == name),
@@ -742,7 +750,7 @@ class OutputsPage(BasePage):
                     new_pos = KdlNode(name="position", props=pos_node.props.copy())
                     out_node.children.append(new_pos)
 
-        o = next((x for x in self._outputs if x.get("name") == name), None)
+        o = next((x for x in self._outputs if x.get(self._node_name) == name), None)
         if o:
             if out_node.get_child("mode") is None:
                 mode_idx = o.get("current_mode")
@@ -822,7 +830,7 @@ class OutputsPage(BasePage):
         out_node = self._get_or_create_out_node(name)
         set_child_arg(out_node, "mode", mode_str)
 
-        o = next((x for x in self._outputs if x.get("name") == name), None)
+        o = next((x for x in self._outputs if x.get(self._node_name) == name), None)
         if o:
             o["current_mode"] = idx
             self._update_logical_dims(o)
@@ -838,7 +846,7 @@ class OutputsPage(BasePage):
         out_node = self._get_or_create_out_node(name)
         set_child_arg(out_node, prop, value)
 
-        o = next((x for x in self._outputs if x.get("name") == name), None)
+        o = next((x for x in self._outputs if x.get(self._node_name) == name), None)
         if o:
             if not o.get("logical"):
                 o["logical"] = {}
@@ -862,7 +870,9 @@ class OutputsPage(BasePage):
         pos_node.props["x"] = int(round(x))
         pos_node.props["y"] = int(round(y))
 
-        o = next((out for out in self._outputs if out.get("name") == name), None)
+        o = next(
+            (out for out in self._outputs if out.get(self._node_name) == name), None
+        )
         if o:
             if not o.get("logical"):
                 o["logical"] = {}
